@@ -1,6 +1,7 @@
 ﻿@page "/chatroom"
 @inject NavigationManager navigationManager
 @using Microsoft.AspNetCore.SignalR.Client;
+@using System.IO
 
 <h1>Blazor SignalR Chat Sample</h1>
 <hr />
@@ -20,6 +21,8 @@
         <div class="invalid-feedback">@_message</div>
         <small id="emailHelp" class="form-text text-muted">@_message</small>
     }
+
+    <InputFile id="uploadFiles" multiple MaxBufferSize="@(20*1024)" OnChange="SelectFiles" />
 }
 else
 {
@@ -70,6 +73,44 @@ else
     private string _hubUrl;
     private HubConnection _hubConnection;
 
+    private async void CreateClient(Action action = null)
+    {
+        if (_hubConnection == null || _hubConnection.State != HubConnectionState.Connected)
+        {
+            string baseUrl = navigationManager.BaseUri;
+
+            _hubUrl = baseUrl.TrimEnd('/') + BlazorChatSampleHub.HubUrl;
+
+            _hubConnection = new HubConnectionBuilder()
+                .WithUrl(_hubUrl)
+                .Build();
+
+            await _hubConnection.StartAsync();
+        }
+
+        action?.Invoke();
+    }
+
+    private async void SelectFiles(InputFileChangeEventArgs e)
+    {
+        var destDirName = "images/products/";
+        string fileUploadPath = Path.Combine(destDirName, e.File.Name);
+
+        await using MemoryStream fs = new();
+        await e.File.OpenReadStream().CopyToAsync(fs);
+
+        var imageMessage = new ImageMessage
+        {
+            ImageHeaders = "data:" + e.File.ContentType + ";base64,",
+            ImageBinary = fs.ToArray()
+        };
+
+        // Create the chat client
+        CreateClient();
+
+        await _hubConnection.SendAsync("Upload", imageMessage);
+    }
+
     public async Task Chat()
     {
         // check username is valid
@@ -89,17 +130,10 @@ else
             _messages.Clear();
 
             // Create the chat client
-            string baseUrl = navigationManager.BaseUri;
-
-            _hubUrl = baseUrl.TrimEnd('/') + BlazorChatSampleHub.HubUrl;
-
-            _hubConnection = new HubConnectionBuilder()
-                .WithUrl(_hubUrl)
-                .Build();
-
-            _hubConnection.On<string, string>("Broadcast", BroadcastMessage);
-
-            await _hubConnection.StartAsync();
+            CreateClient(() =>
+            {
+                _hubConnection.On<string, string>("Broadcast", BroadcastMessage);
+            });
 
             await SendAsync($"[Notice] {_username} joined chat room.");
         }
