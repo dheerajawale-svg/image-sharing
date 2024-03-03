@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Threading.Tasks;
-
+using BlazorChat.Data;
 using Microsoft.AspNetCore.SignalR;
 
 namespace BlazorChat
@@ -12,6 +12,11 @@ namespace BlazorChat
         public async Task Broadcast(string username, string message)
         {
             await Clients.All.SendAsync("Broadcast", username, message);
+        }
+
+        public async Task Upload(ImageMessage message)
+        {
+            await Clients.Others.SendAsync("Upload", message);
         }
 
         public override Task OnConnectedAsync()
